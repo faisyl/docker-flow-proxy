@@ -26,6 +26,7 @@ var reloadPause time.Duration = 1000
 // TODO: Move to data from proxy.go when static (e.g. env. vars.)
 type configData struct {
 	CertsString          string
+	CertsStringSimple    string
 	ContentFrontend      string
 	ConnectionMode       string
 	ContentFrontendSNI   string
@@ -260,6 +261,9 @@ func (m HaProxy) getConfigData() configData {
 	if len(d.ExtraFrontend) > 0 {
 		d.ExtraFrontend = fmt.Sprintf("    %s", d.ExtraFrontend)
 	}
+	if len(d.CertsString) > 0 {
+		d.CertsStringSimple = " ssl crt-list /cfg/crt-list.txt"
+	}
 	m.addDefaultServer(&d)
 	m.addCompression(&d)
 	m.addDebug(&d)
@@ -450,7 +454,11 @@ func (m *HaProxy) getSni(services *Services, config *configData) {
 				httpDone = true
 			} else if strings.EqualFold(sd.ReqMode, "sni") {
 				_, headerExists := snimap[sd.SrcPort]
-				snimap[sd.SrcPort] += m.getFrontTemplateSNI(s, i, !headerExists)
+				// TODO: Figure if we want to support mixed mode; have services do TLS terminataion 
+				// as well as TLS pass-through. To support mixed mode, we'd need to add a new flag
+				// to the service definition indicating if the FE should terminate TLS. Should be off
+				// by default
+				snimap[sd.SrcPort] += m.getFrontTemplateSNI(s, i, !headerExists, config.CertsStringSimple)
 			} else {
 				tcpService := s
 				tcpService.ServiceDest = []ServiceDest{sd}
@@ -477,16 +485,16 @@ func (m *HaProxy) getSni(services *Services, config *configData) {
 }
 
 // TODO: Refactor into template
-func (m *HaProxy) getFrontTemplateSNI(s Service, si int, genHeader bool) string {
+func (m *HaProxy) getFrontTemplateSNI(s Service, si int, genHeader bool, certsString string) string {
 	tmplString := ``
 	if genHeader {
 		tmplString += fmt.Sprintf(`{{$sd1 := index $.ServiceDest %d}}
 
 frontend service_{{$sd1.SrcPort}}
-    bind *:{{$sd1.SrcPort}}
+    bind *:{{$sd1.SrcPort}}%s
     mode tcp
     tcp-request inspect-delay 5s
-    tcp-request content accept if { req_ssl_hello_type 1 }`, si)
+    tcp-request content accept if { req_ssl_hello_type 1 }`, si, certsString)
 	}
 	tmplString += fmt.Sprintf(`{{$sd := index $.ServiceDest %d}}
     acl sni_{{.AclName}}{{$sd.Port}}-%d{{range $sd.ServicePath}} {{$.PathType}} {{.}}{{end}}{{$sd.SrcPortAcl}}
