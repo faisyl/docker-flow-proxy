@@ -17,7 +17,7 @@ func (s *TypesTestSuite) SetupTest() {
 	logPrintf = func(format string, v ...interface{}) {}
 }
 
-func TestRunUnitTestSuite(t *testing.T) {
+func TestTypesUnitTestSuite(t *testing.T) {
 	os.Setenv("SEPARATOR", ",")
 	suite.Run(t, new(TypesTestSuite))
 }
@@ -199,7 +199,6 @@ func (s *TypesTestSuite) Test_GetServiceFromProvider_UsesSeparatorFromEnvVar() {
 	expected := s.getExpectedService()
 	serviceMap := s.getServiceMap(expected, ".1", "@")
 	provider := mapParameterProvider{&serviceMap}
-
 	actual := GetServiceFromProvider(&provider)
 
 	s.Equal(expected, *actual)
@@ -234,9 +233,11 @@ func (s *TypesTestSuite) Test_GetServiceFromProvider_MovesServiceDomainToIndexed
 			Port:               "1234",
 			RedirectFromDomain: []string{},
 			ReqMode:            "reqMode",
-			ServiceDomain:      []string{"domain1", "domain2"},
-			ServiceHeader:      map[string]string{},
-			ServicePath:        []string{"/"},
+			ReqPathSearchReplaceFormatted: []string{},
+			ServiceDomain:                 []string{"domain1", "domain2"},
+			ServiceHeader:                 map[string]string{},
+			ServicePath:                   []string{"/"},
+			ServicePathExclude:            []string{},
 		}},
 		ServiceName: "serviceName",
 	}
@@ -252,6 +253,38 @@ func (s *TypesTestSuite) Test_GetServiceFromProvider_MovesServiceDomainToIndexed
 	s.Equal(expected, *actual)
 }
 
+func (s *TypesTestSuite) Test_GetServiceFromProvider_UsesNonIndexedData() {
+	expected := Service{
+		ServiceDest: []ServiceDest{{
+			AllowedMethods:                []string{},
+			DeniedMethods:                 []string{},
+			Index:                         1,
+			OutboundHostname:              "my-outbound-host.com",
+			Port:                          "1234",
+			RedirectFromDomain:            []string{},
+			ReqMode:                       "reqMode",
+			ReqPathSearchReplace:          "search,replace",
+			ReqPathSearchReplaceFormatted: []string{"search,replace"},
+			ServiceDomain:                 []string{},
+			ServiceHeader:                 map[string]string{},
+			ServicePath:                   []string{"/"},
+			ServicePathExclude:            []string{},
+		}},
+		ServiceName: "serviceName",
+	}
+	serviceMap := map[string]string{
+		"outboundHostname":     expected.ServiceDest[0].OutboundHostname,
+		"port.1":               expected.ServiceDest[0].Port,
+		"reqMode.1":            expected.ServiceDest[0].ReqMode,
+		"reqPathSearchReplace": expected.ServiceDest[0].ReqPathSearchReplace,
+		"serviceName":          expected.ServiceName,
+		"servicePath.1":        strings.Join(expected.ServiceDest[0].ServicePath, ","),
+	}
+	provider := mapParameterProvider{&serviceMap}
+	actual := GetServiceFromProvider(&provider)
+	s.Equal(expected, *actual)
+}
+
 func (s *TypesTestSuite) Test_GetServiceFromProvider_MovesHttpsOnlyToIndexedEntries_WhenEmpty() {
 	expected := Service{
 		ServiceDest: []ServiceDest{{
@@ -261,24 +294,55 @@ func (s *TypesTestSuite) Test_GetServiceFromProvider_MovesHttpsOnlyToIndexedEntr
 			Index:              1,
 			Port:               "1234",
 			RedirectFromDomain: []string{},
-			ReqMode:            "reqMode",
-			ServiceDomain:      []string{},
-			ServiceHeader:      map[string]string{},
-			ServicePath:        []string{"/"},
+			ReqMode:            "http",
+			ReqPathSearchReplaceFormatted: []string{},
+			ServiceDomain:                 []string{},
+			ServiceHeader:                 map[string]string{},
+			ServicePath:                   []string{"/"},
+			ServicePathExclude:            []string{},
 		}},
 		ServiceName: "serviceName",
 	}
 	serviceMap := map[string]string{
-		//		"serviceDomain": strings.Join(expected.ServiceDest[0].ServiceDomain, ","),
-		"httpsOnly":         strconv.FormatBool(expected.ServiceDest[0].HttpsOnly),
-		"httpsRedirectCode": expected.ServiceDest[0].HttpsRedirectCode,
-		"serviceName":       expected.ServiceName,
-		"port.1":            expected.ServiceDest[0].Port,
-		"reqMode.1":         expected.ServiceDest[0].ReqMode,
-		"servicePath.1":     strings.Join(expected.ServiceDest[0].ServicePath, ","),
+		"httpsOnly":     strconv.FormatBool(expected.ServiceDest[0].HttpsOnly),
+		"serviceName":   expected.ServiceName,
+		"port.1":        expected.ServiceDest[0].Port,
+		"servicePath.1": strings.Join(expected.ServiceDest[0].ServicePath, ","),
 	}
 	provider := mapParameterProvider{&serviceMap}
 	actual := GetServiceFromProvider(&provider)
+	s.Equal(expected, *actual)
+}
+
+func (s *TypesTestSuite) Test_GetServiceFromProvider_UsesHttpsOnlyFromEnvVar() {
+	defer func() { os.Unsetenv("HTTPS_ONLY") }()
+	os.Setenv("HTTPS_ONLY", "true")
+	expected := Service{
+		ServiceDest: []ServiceDest{{
+			AllowedMethods:     []string{},
+			DeniedMethods:      []string{},
+			HttpsOnly:          true,
+			Index:              1,
+			Port:               "1234",
+			RedirectFromDomain: []string{},
+			ReqMode:            "http",
+			ReqPathSearchReplaceFormatted: []string{},
+			ServiceDomain:                 []string{},
+			ServiceHeader:                 map[string]string{},
+			ServicePath:                   []string{"/"},
+			ServicePathExclude:            []string{},
+		}},
+		ServiceName: "serviceName",
+	}
+	serviceMap := map[string]string{
+		"serviceName":   expected.ServiceName,
+		"port.1":        expected.ServiceDest[0].Port,
+		"servicePath.1": strings.Join(expected.ServiceDest[0].ServicePath, ","),
+	}
+	provider := mapParameterProvider{&serviceMap}
+
+	actual := GetServiceFromProvider(&provider)
+
 	s.Equal(expected, *actual)
 }
 
@@ -300,7 +364,6 @@ func (s *TypesTestSuite) getServiceMap(expected Service, indexSuffix, separator 
 		"distribute":            strconv.FormatBool(expected.Distribute),
 		"httpsPort":             strconv.Itoa(expected.HttpsPort),
 		"isDefaultBackend":      strconv.FormatBool(expected.IsDefaultBackend),
-		"outboundHostname":      expected.OutboundHostname,
 		"pathType":              expected.PathType,
 		"redirectWhenHttpProto": strconv.FormatBool(expected.RedirectWhenHttpProto),
 		"reqPathReplace":        expected.ReqPathReplace,
@@ -319,20 +382,23 @@ func (s *TypesTestSuite) getServiceMap(expected Service, indexSuffix, separator 
 		"users":                 "user1:pass1,user2:pass2",
 		"usersPassEncrypted":    "true",
 		// ServiceDest
-		"allowedMethods" + indexSuffix:      strings.Join(expected.ServiceDest[0].AllowedMethods, separator),
-		"deniedMethods" + indexSuffix:       strings.Join(expected.ServiceDest[0].DeniedMethods, separator),
-		"denyHttp" + indexSuffix:            strconv.FormatBool(expected.ServiceDest[0].DenyHttp),
-		"httpsOnly" + indexSuffix:           strconv.FormatBool(expected.ServiceDest[0].HttpsOnly),
-		"httpsRedirectCode" + indexSuffix:   expected.ServiceDest[0].HttpsRedirectCode,
-		"ignoreAuthorization" + indexSuffix: strconv.FormatBool(expected.ServiceDest[0].IgnoreAuthorization),
-		"port" + indexSuffix:                expected.ServiceDest[0].Port,
-		"redirectFromDomain" + indexSuffix:  strings.Join(expected.ServiceDest[0].RedirectFromDomain, separator),
-		"reqMode" + indexSuffix:             expected.ServiceDest[0].ReqMode,
-		"serviceDomain" + indexSuffix:       strings.Join(expected.ServiceDest[0].ServiceDomain, separator),
-		"serviceHeader" + indexSuffix:       header,
-		"servicePath" + indexSuffix:         strings.Join(expected.ServiceDest[0].ServicePath, separator),
-		"userAgent" + indexSuffix:           strings.Join(expected.ServiceDest[0].UserAgent.Value, separator),
-		"verifyClientSsl" + indexSuffix:     strconv.FormatBool(expected.ServiceDest[0].VerifyClientSsl),
+		"allowedMethods" + indexSuffix:       strings.Join(expected.ServiceDest[0].AllowedMethods, separator),
+		"deniedMethods" + indexSuffix:        strings.Join(expected.ServiceDest[0].DeniedMethods, separator),
+		"denyHttp" + indexSuffix:             strconv.FormatBool(expected.ServiceDest[0].DenyHttp),
+		"httpsOnly" + indexSuffix:            strconv.FormatBool(expected.ServiceDest[0].HttpsOnly),
+		"httpsRedirectCode" + indexSuffix:    expected.ServiceDest[0].HttpsRedirectCode,
+		"ignoreAuthorization" + indexSuffix:  strconv.FormatBool(expected.ServiceDest[0].IgnoreAuthorization),
+		"outboundHostname" + indexSuffix:     expected.ServiceDest[0].OutboundHostname,
+		"port" + indexSuffix:                 expected.ServiceDest[0].Port,
+		"redirectFromDomain" + indexSuffix:   strings.Join(expected.ServiceDest[0].RedirectFromDomain, separator),
+		"reqMode" + indexSuffix:              expected.ServiceDest[0].ReqMode,
+		"reqPathSearchReplace" + indexSuffix: expected.ServiceDest[0].ReqPathSearchReplace,
+		"serviceDomain" + indexSuffix:        strings.Join(expected.ServiceDest[0].ServiceDomain, separator),
+		"serviceHeader" + indexSuffix:        header,
+		"servicePath" + indexSuffix:          strings.Join(expected.ServiceDest[0].ServicePath, separator),
+		"userAgent" + indexSuffix:            strings.Join(expected.ServiceDest[0].UserAgent.Value, separator),
+		"userDef" + indexSuffix:              expected.ServiceDest[0].UserDef,
+		"verifyClientSsl" + indexSuffix:      strconv.FormatBool(expected.ServiceDest[0].VerifyClientSsl),
 	}
 }
 
@@ -347,7 +413,6 @@ func (s *TypesTestSuite) getExpectedService() Service {
 		Distribute:            true,
 		HttpsPort:             1234,
 		IsDefaultBackend:      true,
-		OutboundHostname:      "outboundHostname",
 		PathType:              "pathType",
 		RedirectWhenHttpProto: true,
 		ReqPathReplace:        "reqPathReplace",
@@ -355,21 +420,26 @@ func (s *TypesTestSuite) getExpectedService() Service {
 		ServiceCert:           "serviceCert",
 		ServiceDomainAlgo:     "hdr_dom",
 		ServiceDest: []ServiceDest{{
-			AllowedMethods:      []string{"GET", "DELETE"},
-			DeniedMethods:       []string{"PUT", "POST"},
-			DenyHttp:            true,
-			HttpsOnly:           true,
-			HttpsRedirectCode:   "302",
-			IgnoreAuthorization: true,
-			Port:                "1234",
-			RedirectFromDomain:  []string{"sub.domain1", "sub.domain2"},
-			ServiceDomain:       []string{"domain1", "domain2"},
-			ServiceHeader:       map[string]string{"X-Version": "3", "name": "Viktor"},
-			ServicePath:         []string{"/"},
-			ReqMode:             "reqMode",
-			UserAgent:           UserAgent{Value: []string{"agent-1", "agent-2/replace-with_"}, AclName: "agent_1_agent_2_replace_with_"},
-			VerifyClientSsl:     true,
-			Index:               1,
+			AllowedMethods:                []string{"GET", "DELETE"},
+			DeniedMethods:                 []string{"PUT", "POST"},
+			DenyHttp:                      true,
+			HttpsOnly:                     true,
+			HttpsRedirectCode:             "302",
+			IgnoreAuthorization:           true,
+			OutboundHostname:              "outboundHostname",
+			Port:                          "1234",
+			RedirectFromDomain:            []string{"sub.domain1", "sub.domain2"},
+			ServiceDomain:                 []string{"domain1", "domain2"},
+			ServiceHeader:                 map[string]string{"X-Version": "3", "name": "Viktor"},
+			ServicePath:                   []string{"/"},
+			ServicePathExclude:            []string{},
+			ReqMode:                       "reqMode",
+			ReqPathSearchReplace:          "something,else:foo,bar",
+			ReqPathSearchReplaceFormatted: []string{"reqPathSearch,reqPathReplace", "something,else", "foo,bar"},
+			UserAgent:                     UserAgent{Value: []string{"agent-1", "agent-2/replace-with_"}, AclName: "agent_1_agent_2_replace_with_"},
+			UserDef:                       "userDef",
+			VerifyClientSsl:               true,
+			Index:                         1,
 		}},
 		ServiceName:    "serviceName",
 		SetReqHeader:   []string{"set-header-1", "set-header-2"},

@@ -21,7 +21,7 @@ type HaProxy struct {
 // Instance is a singleton containing an instance of the proxy
 var Instance proxy
 
-var reloadPauseMilliseconds time.Duration = 1000
+var reloadPause time.Duration = 1000
 
 // TODO: Move to data from proxy.go when static (e.g. env. vars.)
 type configData struct {
@@ -151,7 +151,11 @@ func (m HaProxy) Reload() error {
 		if err := m.validateConfig(); err != nil {
 			logPrintf("Config validation failed. Will try again...")
 			reloadErr = err
+			time.Sleep(time.Millisecond * reloadPause)
 			continue
+		}
+		if reloadErr != nil {
+			logPrintf(reloadErr.Error())
 		}
 		pidPath := "/var/run/haproxy.pid"
 		pid, err := readPidFile(pidPath)
@@ -166,7 +170,7 @@ func (m HaProxy) Reload() error {
 			break
 		}
 		logPrintf("Proxy config could not be reloaded. Will try again...")
-		time.Sleep(time.Millisecond * reloadPauseMilliseconds)
+		time.Sleep(time.Millisecond * reloadPause)
 	}
 	return reloadErr
 }
@@ -307,7 +311,11 @@ func (m *HaProxy) getCertsConfigSnippet() string {
 	certPaths := m.GetCertPaths()
 	certs := ""
 	if len(certPaths) > 0 {
-		certs = " ssl crt-list /cfg/crt-list.txt"
+		h2 := ""
+		if strings.EqualFold(os.Getenv("ENABLE_H2"), "true") {
+			h2 = "h2,"
+		}
+		certs = fmt.Sprintf(" ssl crt-list /cfg/crt-list.txt alpn %shttp/1.1", h2)
 		mu.Lock()
 		defer mu.Unlock()
 		writeFile("/cfg/crt-list.txt", []byte(strings.Join(certPaths, "\n")), 0664)

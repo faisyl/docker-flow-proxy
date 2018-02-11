@@ -42,6 +42,7 @@ pipeline {
         sh "docker image push vfarcic/docker-flow-proxy:${currentBuild.displayName}-packet-beat"
         dockerLogout()
         dfRelease("docker-flow-proxy")
+        dfReleaseGithub("docker-flow-proxy")
       }
     }
     stage("deploy") {
@@ -58,7 +59,7 @@ pipeline {
   }
   post {
     always {
-      sh "docker system prune -f"
+      sh "docker system prune -f -a --volumes"
     }
     failure {
       slackSend(

@@ -341,6 +341,26 @@ backend myService-be1234_0
 	s.Equal(expectedBack, actualBack)
 }
 
+func (s ReconfigureTestSuite) Test_GetTemplates_UsesOutboundHostname() {
+	s.reconfigure.Service.HttpsPort = 4321
+	s.reconfigure.Service.ServiceDest[0].Port = "1234"
+	s.reconfigure.Service.ServiceDest[0].Index = 1
+	s.reconfigure.Service.ServiceDest[0].OutboundHostname = "acme.com"
+	expected := `
+backend myService-be1234_1
+    mode http
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
+    server myService acme.com:1234
+backend https-myService-be1234_1
+    mode http
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
+    server myService acme.com:4321`
+
+	_, actual, _ := s.reconfigure.GetTemplates()
+
+	s.Equal(expected, actual)
+}
+
 func (s ReconfigureTestSuite) Test_GetTemplates_AddsTimeoutServer_WhenPresent() {
 	expectedBack := `
 backend myService-be1234_4
@@ -398,19 +418,26 @@ backend myService-be5555_2
 	s.Equal(expectedBack, actualBack)
 }
 
-func (s ReconfigureTestSuite) Test_GetTemplates_AddsHttpRequestSetPath_WhenReqPathSearchAndReqPathReplaceArePresent() {
-	s.reconfigure.ReqPathSearch = "this"
-	s.reconfigure.ReqPathReplace = "that"
-	s.reconfigure.ServiceDest = []proxy.ServiceDest{{Port: "1234", Index: 0}}
-	expected := fmt.Sprintf(`
+func (s ReconfigureTestSuite) Test_GetTemplates_AddsHttpRequestSetPath_WhenReqPathSearchReplaceFormattedIsPresent() {
+	s.reconfigure.HttpsPort = 1234
+	s.reconfigure.ServiceDest = []proxy.ServiceDest{{
+		Port:  "1234",
+		Index: 0,
+		ReqPathSearchReplaceFormatted: []string{"this,that", "foo,bar"},
+	}}
+	expected := `
 backend myService-be1234_0
     mode http
     http-request add-header X-Forwarded-Proto https if { ssl_fc }
-    http-request set-path %%[path,regsub(%s,%s)]
-    server myService myService:1234`,
-		s.reconfigure.ReqPathSearch,
-		s.reconfigure.ReqPathReplace,
-	)
+    http-request set-path %[path,regsub(this,that)]
+    http-request set-path %[path,regsub(foo,bar)]
+    server myService myService:1234
+backend https-myService-be1234_0
+    mode http
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
+    http-request set-path %[path,regsub(this,that)]
+    http-request set-path %[path,regsub(foo,bar)]
+    server myService myService:1234`
 
 	_, backend, _ := s.reconfigure.GetTemplates()
 
@@ -537,8 +564,8 @@ func (s ReconfigureTestSuite) Test_Execute_WritesBeTemplateWithRedirectToHttps_W
 		`
 backend %s-be%s_0
     mode http
-    http-request add-header X-Forwarded-Proto https if { ssl_fc }
     http-request redirect scheme https if !{ ssl_fc }
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
     server %s %s:%s`,
 		s.ServiceName,
 		s.reconfigure.ServiceDest[0].Port,
@@ -570,8 +597,8 @@ func (s ReconfigureTestSuite) Test_Execute_WritesBeTemplateWithHttpsRedirectCode
 		`
 backend %s-be%s_0
     mode http
-    http-request add-header X-Forwarded-Proto https if { ssl_fc }
     http-request redirect scheme https code %s if !{ ssl_fc }
+    http-request add-header X-Forwarded-Proto https if { ssl_fc }
     server %s %s:%s`,
 		s.ServiceName,
 		s.reconfigure.ServiceDest[0].Port,
@@ -693,7 +720,7 @@ backend %s-be%s_0
 }
 
 func (s ReconfigureTestSuite) Test_Execute_AddsReqHeader_WhenSetReqHeaderIsSet() {
-	s.reconfigure.SetReqHeader = []string{"header-1", "header-2"}
+	s.reconfigure.SetReqHeader = []string{"header-1", "Strict-Transport-Security \"max-age=16000000; includeSubDomains; preload;\""}
 	var actualFilename, actualData string
 	expectedFilename := fmt.Sprintf("%s/%s-be.cfg", s.TemplatesPath, s.ServiceName)
 	expectedData := fmt.Sprintf(
@@ -702,7 +729,7 @@ backend %s-be%s_0
     mode http
     http-request add-header X-Forwarded-Proto https if { ssl_fc }
     http-request set-header header-1
-    http-request set-header header-2
+    http-request set-header Strict-Transport-Security "max-age=16000000; includeSubDomains; preload;"
     server %s %s:%s`,
 		s.ServiceName,
 		s.reconfigure.ServiceDest[0].Port,
