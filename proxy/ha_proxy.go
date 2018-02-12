@@ -498,8 +498,7 @@ func (m *HaProxy) getFrontTemplateSNI(s Service, si int, genHeader bool, certsSt
 
 frontend service_{{$sd1.SrcPort}}
     bind *:{{$sd1.SrcPort}}%s
-    mode tcp%s
-    `, si, certsString, tcpInspect)
+    mode tcp%s`, si, certsString, tcpInspect)
 	}
 	tmplString += fmt.Sprintf(`{{$sd := index $.ServiceDest %d}}
     acl sni_{{.AclName}}{{$sd.Port}}-%d{{range $sd.ServicePath}} {{$.PathType}} {{.}}{{end}}{{$sd.SrcPortAcl}}
