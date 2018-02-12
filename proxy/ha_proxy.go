@@ -487,14 +487,19 @@ func (m *HaProxy) getSni(services *Services, config *configData) {
 // TODO: Refactor into template
 func (m *HaProxy) getFrontTemplateSNI(s Service, si int, genHeader bool, certsString string) string {
 	tmplString := ``
+	tcpInspect := ``
+	if len(certsString) > 0 {
+		tcpInspect = `
+    tcp-request inspect-delay 5s
+    tcp-request content accept if { req_ssl_hello_type 1 }`
+	}
 	if genHeader {
 		tmplString += fmt.Sprintf(`{{$sd1 := index $.ServiceDest %d}}
 
 frontend service_{{$sd1.SrcPort}}
     bind *:{{$sd1.SrcPort}}%s
-    mode tcp
-    tcp-request inspect-delay 5s
-    tcp-request content accept if { req_ssl_hello_type 1 }`, si, certsString)
+    mode tcp%s
+    `, si, certsString, tcpInspect)
 	}
 	tmplString += fmt.Sprintf(`{{$sd := index $.ServiceDest %d}}
     acl sni_{{.AclName}}{{$sd.Port}}-%d{{range $sd.ServicePath}} {{$.PathType}} {{.}}{{end}}{{$sd.SrcPortAcl}}
