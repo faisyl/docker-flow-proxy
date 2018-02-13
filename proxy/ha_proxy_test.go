@@ -46,7 +46,6 @@ defaults
     option  dontlognull
     option  dontlog-normal
     option  http-server-close
-    option  forwardfor
     option  redispatch
 
     errorfile 400 /errorfiles/400.http
@@ -2277,6 +2276,7 @@ func (s *HaProxyTestSuite) Test_Reload_RunsRunCmd() {
 		"-f",
 		"/cfg/haproxy.cfg",
 		"-D",
+		"-d",
 		"-p",
 		"/var/run/haproxy.pid",
 		"-sf",
@@ -2295,6 +2295,7 @@ func (s *HaProxyTestSuite) Test_Reload_Terminate_RunsRunCmd() {
 		"-f",
 		"/cfg/haproxy.cfg",
 		"-D",
+		"-d",
 		"-p",
 		"/var/run/haproxy.pid",
 		"-st",
@@ -2314,6 +2315,7 @@ func (s *HaProxyTestSuite) Test_RunCmd_AddsExtraArguments() {
 		"-f",
 		"/cfg/haproxy.cfg",
 		"-D",
+		"-d",
 		"-p",
 		"/var/run/haproxy.pid",
 		"arg1", "arg2", "arg3",

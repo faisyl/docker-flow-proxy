@@ -100,6 +100,7 @@ func (m HaProxy) RunCmd(extraArgs []string) error {
 		"-f",
 		"/cfg/haproxy.cfg",
 		"-D",
+		"-d",
 		"-p",
 		"/var/run/haproxy.pid",
 	}
