@@ -30,6 +30,7 @@ var reloadMu = &sync.Mutex{}
 // TODO: Move to data from proxy.go when static (e.g. env. vars.)
 type configData struct {
 	CertsString          string
+	CertsStringSimple    string
 	ContentFrontend      string
 	ConnectionMode       string
 	ContentFrontendSNI   string
@@ -142,6 +143,7 @@ func (m HaProxy) RunCmd(extraArgs []string) error {
 		"-f",
 		"/cfg/haproxy.cfg",
 		"-D",
+		"-d",
 		"-p",
 		"/var/run/haproxy.pid",
 	}
@@ -342,6 +344,9 @@ func (m HaProxy) getConfigData() configData {
 	d.ExtraFrontend = getSecretOrEnvVarSplit("EXTRA_FRONTEND", "")
 	if len(d.ExtraFrontend) > 0 {
 		d.ExtraFrontend = fmt.Sprintf("    %s", d.ExtraFrontend)
+	}
+	if len(d.CertsString) > 0 {
+		d.CertsStringSimple = " ssl crt-list /cfg/crt-list.txt"
 	}
 	m.addDefaultServer(&d)
 	m.addCompression(&d)
