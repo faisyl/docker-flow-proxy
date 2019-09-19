@@ -1,12 +1,17 @@
 FROM golang:1.11.0-alpine AS build
-ADD . /src
+
+RUN mkdir /src
 WORKDIR /src
+COPY go.mod go.sum ./
 RUN set -x \
-    && apk add --update --no-cache --no-progress git g++ \
+    && apk add --update --no-cache --no-progress git g++
+RUN set -x \
+    && go mod download
+ADD . /src
+RUN set -x \
     && go get -d -v \
     && go test --cover ./... --run UnitTest \
     && go build -v -o docker-flow-proxy
-
 
 FROM haproxy:1.8.13-alpine
 LABEL org.opencontainers.image.title="Docker Flow Proxy" \

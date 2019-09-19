@@ -20,7 +20,3 @@ services:
       - HOST_IP=${HOST_IP}
       - DOCKER_HUB_USER=${DOCKER_HUB_USER}
     command: ["sh", "-c", "chmod +x /src/run-tests.sh && /src/run-tests.sh"]
-
-  sut:
-    build: .
-    command: echo "Ignoring autotest"
